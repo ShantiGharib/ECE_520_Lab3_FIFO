@@ -32,11 +32,11 @@ use std.env.finish;
 --library UNISIM;
 --use UNISIM.VComponents.all;
 
-entity fifo_tb is
+entity fifo_deterministic_tb is
 --  Port ( );
-end fifo_tb;
+end fifo_deterministic_tb;
 
-architecture Behavioral of fifo_tb is
+architecture Behavioral of fifo_deterministic_tb is
     constant CLK_PERIOD : time := 20 ns;
     --------------generics----
     constant WIDTH_TB : integer := 0; --don't forget to assign real values

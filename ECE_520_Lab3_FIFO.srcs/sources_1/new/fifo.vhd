@@ -89,8 +89,8 @@ begin
                 DELAYED_OUTPUTS(it) <= DELAYED_OUTPUTS(it-1);
                 DELAYED_VALID_OUTPUT(it) <= DELAYED_VALID_OUTPUT(it-1);
             end loop;
-            DELAYED_OUTPUTS(0) <= (others => '0');
-            DELAYED_VALID_OUTPUT(0) <= '0';
+            DELAYED_OUTPUTS(0) <= (others => '0'); --final value determined below
+            DELAYED_VALID_OUTPUT(0) <= '0';        --final value determined below
             -----
             if (SRST = '1') then
                 READ_POINTER  <= 0;
@@ -99,10 +99,10 @@ begin
                 DELAYED_VALID_OUTPUT <= (others => '0'); --last assignment wins for signals
                 DELAYED_OUTPUTS <= (others => (others => '0'));
             elsif ((READ_ENABLE = '1') and (EMPTY = '0')) then
-                ---adjusted for READ Latency Pipeline
+                ---adjusted for READ Latency Pipeline---
                 DELAYED_OUTPUTS(0) <= FIFO_RAM(READ_POINTER);
                 DELAYED_VALID_OUTPUT(0) <= '1';
-                ---
+                ----------------------------------------
                 READ_POINTER <= READ_POINTER + 1 when (READ_POINTER /= (DEPTH-1)) else 0;
                 DATA_COUNT <= DATA_COUNT - 1;
             elsif ((WRITE_ENABLE = '1') and (FULL = '0')) then
