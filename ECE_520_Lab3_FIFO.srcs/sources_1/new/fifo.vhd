@@ -41,19 +41,18 @@ entity fifo is
         READ_LATENCY : positive := 1 --Number of output pipeline register stages. Minimum is 1 and maximum is 8.
     );
     Port (
-        CLK : in std_logic;
-        SRST : in std_logic; --active high, resets read and write pointers
-        DATA_IN : in std_logic_vector(WIDTH-1 downto 0);
+        CLK          : in std_logic;
+        SRST         : in std_logic; --active high, resets read and write pointers
+        DATA_IN      : in std_logic_vector(WIDTH-1 downto 0);
         WRITE_ENABLE : in std_logic; --active high, is respected only when FIFO has available space
-        READ_ENABLE : in std_logic; --active high, is respected only when FIFO is not empty
+        READ_ENABLE  : in std_logic; --active high, is respected only when FIFO is not empty
 
-        DATA_COUNT : out integer range 0 to DEPTH := 0;
-        VALID : out std_logic := '0'; --for read ops
-        DATA_OUT : out std_logic_vector(WIDTH-1 downto 0); --all zeroes is a valid output so VALID Flag should be used to indicate whether data_out has meaningful value
-        ALMOST_FULL : out std_logic;
-        ALMOST_EMPTY : out std_logic;
-        FULL : out std_logic;
-        EMPTY : out std_logic
+        VALID        : out std_logic := '0'; --for read ops
+        DATA_COUNT   : out integer range 0 to DEPTH := 0;
+        DATA_OUT     : out std_logic_vector(WIDTH-1 downto 0) := (others => '0');
+        
+        EMPTY, ALMOST_EMPTY : out std_logic := '1';
+        FULL ,  ALMOST_FULL : out std_logic := '0'
     );
 end fifo;
 
@@ -63,6 +62,7 @@ end fifo;
 architecture Behavioral of fifo is
     constant READ_LATENCY_MIN : integer := 1;
     constant READ_LATENCY_MAX : integer := 8;
+    constant HAS_LATENCY : boolean := (READ_LATENCY > 1);
     signal READ_POINTER  : integer range 0 to DEPTH-1 := 0;
     signal WRITE_POINTER : integer range 0 to DEPTH-1 := 0;
     type slv_vector is array(natural range<>) of std_logic_vector(WIDTH-1 downto 0);
@@ -74,42 +74,61 @@ begin
     assert (READ_LATENCY >= READ_LATENCY_MIN) and (READ_LATENCY <= READ_LATENCY_MAX);
     assert ALMOST_EMPTY_THRESHOLD <= ALMOST_FULL_THRESHOLD and ALMOST_FULL_THRESHOLD <= DEPTH;
 
-    ALMOST_EMPTY <= '1' when (DATA_COUNT <= ALMOST_EMPTY_THRESHOLD) else '0';
-    ALMOST_FULL  <= '1' when (DATA_COUNT >=  ALMOST_FULL_THRESHOLD) else '0';
-    EMPTY <= '1' when (DATA_COUNT =     0) else '0';
-    FULL  <= '1' when (DATA_COUNT = DEPTH) else '0';
-    DATA_OUT <= DELAYED_OUTPUTS(READ_LATENCY-1);
-    VALID <= DELAYED_VALID_OUTPUT(READ_LATENCY-1);
-
     FIFO_OPS : process(CLK)
+        variable data_count_var : integer range 0 to DEPTH := 0;
     begin
         if (rising_edge(CLK)) then
-            -----READ Latency Pipeline
-            for it in READ_LATENCY-1 downto 1 loop
-                DELAYED_OUTPUTS(it) <= DELAYED_OUTPUTS(it-1);
-                DELAYED_VALID_OUTPUT(it) <= DELAYED_VALID_OUTPUT(it-1);
-            end loop;
-            DELAYED_OUTPUTS(0) <= (others => '0'); --final value determined below
-            DELAYED_VALID_OUTPUT(0) <= '0';        --final value determined below
-            -----
-            if (SRST = '1') then
-                READ_POINTER  <= 0;
-                WRITE_POINTER <= 0;
-                DATA_COUNT    <= 0;
-                DELAYED_VALID_OUTPUT <= (others => '0'); --last assignment wins for signals
-                DELAYED_OUTPUTS <= (others => (others => '0'));
-            elsif ((READ_ENABLE = '1') and (EMPTY = '0')) then
-                ---adjusted for READ Latency Pipeline---
-                DELAYED_OUTPUTS(0) <= FIFO_RAM(READ_POINTER);
-                DELAYED_VALID_OUTPUT(0) <= '1';
-                ----------------------------------------
-                READ_POINTER <= READ_POINTER + 1 when (READ_POINTER /= (DEPTH-1)) else 0;
-                DATA_COUNT <= DATA_COUNT - 1;
-            elsif ((WRITE_ENABLE = '1') and (FULL = '0')) then
-                FIFO_RAM(WRITE_POINTER) <= DATA_IN;
-                WRITE_POINTER <= WRITE_POINTER + 1 when (WRITE_POINTER /= (DEPTH-1)) else 0;
-                DATA_COUNT <= DATA_COUNT + 1;
+            if (HAS_LATENCY) then
+                -----READ Latency Pipeline
+                DATA_OUT <= DELAYED_OUTPUTS(READ_LATENCY-2);
+                VALID    <= DELAYED_VALID_OUTPUT(READ_LATENCY-2);
+                for it in READ_LATENCY-2 downto 1 loop
+                    DELAYED_OUTPUTS(it)      <= DELAYED_OUTPUTS(it-1);
+                    DELAYED_VALID_OUTPUT(it) <= DELAYED_VALID_OUTPUT(it-1);
+                end loop;
+                DELAYED_OUTPUTS(0)      <= (others => '0');
+                DELAYED_VALID_OUTPUT(0) <= '0';
+                -----
+            else
+                DATA_OUT <= (others => '0');
+                VALID    <= '0';
             end if;
+            
+            if (SRST = '1') then
+                READ_POINTER   <= 0;
+                WRITE_POINTER  <= 0;
+                data_count_var := 0;                
+                if (HAS_LATENCY) then
+                    DATA_OUT <= (others => '0');
+                    VALID    <= '0';
+                    DELAYED_OUTPUTS      <= (others => (others => '0'));
+                    DELAYED_VALID_OUTPUT <= (others => '0');
+                end if;
+
+            elsif ((READ_ENABLE = '1') and (EMPTY /= '1')) then
+                if (HAS_LATENCY) then
+                    ---adjusted for READ Latency Pipeline---
+                    DELAYED_OUTPUTS(0)      <= FIFO_RAM(READ_POINTER);
+                    DELAYED_VALID_OUTPUT(0) <= '1';
+                    ----------------------------------------
+                else
+                    DATA_OUT <= FIFO_RAM(READ_POINTER);
+                    VALID    <= '1';
+                end if;
+                READ_POINTER   <= READ_POINTER + 1 when (READ_POINTER /= (DEPTH-1)) else 0;
+                data_count_var := data_count_var - 1;
+
+            elsif ((WRITE_ENABLE = '1') and (FULL /= '1')) then
+                FIFO_RAM(WRITE_POINTER) <= DATA_IN;
+                WRITE_POINTER  <= WRITE_POINTER + 1 when (WRITE_POINTER /= (DEPTH-1)) else 0;
+                data_count_var := data_count_var + 1;
+            end if;
+
+            DATA_COUNT   <= data_count_var;
+            ALMOST_EMPTY <= '1' when (data_count_var <= ALMOST_EMPTY_THRESHOLD) else '0';
+            ALMOST_FULL  <= '1' when (data_count_var >=  ALMOST_FULL_THRESHOLD) else '0';
+            EMPTY        <= '1' when (data_count_var  =                      0) else '0';
+            FULL         <= '1' when (data_count_var  =                  DEPTH) else '0';
         end if;
 
     end process;

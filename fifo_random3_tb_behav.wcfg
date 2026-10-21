@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wave_config>
+   <wave_state>
+   </wave_state>
+   <db_ref_list>
+      <db_ref path="fifo_random3_tb_behav.wdb" id="1">
+         <top_modules>
+            <top_module name="fifo_random3_tb" />
+            <top_module name="functions" />
+            <top_module name="input_file_parse" />
+         </top_modules>
+      </db_ref>
+   </db_ref_list>
+   <zoom_setting>
+      <ZoomStartTime time="0.000000 us"></ZoomStartTime>
+      <ZoomEndTime time="17.165002 us"></ZoomEndTime>
+      <Cursor1Time time="4.785000 us"></Cursor1Time>
+   </zoom_setting>
+   <column_width_setting>
+      <NameColumnWidth column_width="580"></NameColumnWidth>
+      <ValueColumnWidth column_width="116"></ValueColumnWidth>
+   </column_width_setting>
+   <WVObjectSize size="0" />
+</wave_config>

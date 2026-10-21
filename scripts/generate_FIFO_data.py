@@ -34,7 +34,7 @@ def main(bit_width : int):
 		operation_random_idx = random.randint(1, 100)
 		if (operation_random_idx <= write_operation_bias):
 			random_num = random.randint(0, (2 ** bit_width) - 1)
-			output_str += str(random_num) + "\n"
+			output_str += "+" + str(random_num) + "\n"
 			output_writes_only_str += str(random_num) + "\n"
 		else:
 			output_str += "-\n"
