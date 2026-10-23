@@ -74,9 +74,9 @@ architecture Behavioral of fifo_random_tb is
     constant CLK_PERIOD : time := 20 ns;
     --------------generics----
     constant WIDTH_TB : integer := 24;
-    constant DEPTH_TB : integer := 2**6;
-    constant ALMOST_EMPTY_THRESHOLD_TB : integer := 25;
-    constant ALMOST_FULL_THRESHOLD_TB : integer  := 53;
+    constant DEPTH_TB : integer := 16;
+    constant ALMOST_EMPTY_THRESHOLD_TB : integer := 3;
+    constant ALMOST_FULL_THRESHOLD_TB : integer := 9;
     constant READ_LATENCY_TB : integer := 4;
     -------------------------
 
@@ -102,8 +102,8 @@ architecture Behavioral of fifo_random_tb is
 	signal do_fifo_read_sig : boolean := false;
 	signal write_num_sig     : integer := 0;
 	signal next_read_num_sig : integer := 0;
-	signal FIFO_JUST_MADE_FULL_sig : boolean := false;
-	signal data_available_sig : integer := 0;
+	signal data_in_fifo_prev_sig : integer := 0;
+	signal data_in_fifo_prev2_sig : integer := 0;
 begin
 
     CLK_PROCESS : process
@@ -141,36 +141,21 @@ begin
     test_process : process
     variable L : line;
 	variable L_writes_only : line;
-	variable do_fifo_read : boolean := false;
+	variable do_fifo_read  : boolean := false;
 	variable write_num     : integer := 0;
 	variable next_read_num : integer := 0;
-	variable FIFO_JUST_MADE_FULL : boolean := false;
-	variable data_available : integer := 0;
+	variable data_in_fifo_prev  : integer :=  0;
+	variable data_in_fifo_prev2 : integer :=  0; --expectation is fifo data_count signal is behind by two clock cycles. one clock cycle to update data_count, another clock cycle for others to read the change
     begin
 		while not endfile(input_file) loop
+			--assumption is an operation is performed every iteration
             wait until rising_edge(CLK_TB);
-			if (READ_ENABLE_TB = '1' and (data_available > DATA_COUNT_TB or (read_latency_valid_counter(0) = '1' and data_available = DATA_COUNT_TB)))
+			if (data_in_fifo_prev2 /= DATA_COUNT_TB) 
 			then
 				report "TEST FAILED: DATA_COUNT not accurate";
-				if (data_available > DATA_COUNT_TB) then
-				    report "data_available should not exceed the FIFO's data_count output after a Read request";
-				else
-				    report "data_available should always be one clock cycle ahead of the FIFO's data_count output after a successful Read operation";
-				end if;
-                report "data_available = " & to_string(data_available) & ", DATA_COUNT = " & to_string(DATA_COUNT_TB);
+				report "data_in_fifo = " & to_string(data_in_fifo_prev2) & ", DATA_COUNT = " & to_string(DATA_COUNT_TB);
                 wait for CLK_PERIOD/4;
 				finish;
-			elsif (WRITE_ENABLE_TB = '1' and (data_available < DATA_COUNT_TB or (not FIFO_JUST_MADE_FULL and data_available = DEPTH_TB and data_available = DATA_COUNT_TB)))
-			then
-				report "TEST FAILED: DATA_COUNT not accurate";
-				if (data_available < DATA_COUNT_TB) then
-				    report "data_available should not be less than the FIFO's data_count output after a write request";
-				else
-				    report "data_available should always be one clock cycle ahead of the FIFO's data_count output after a successful write operation";
-				end if;
-                report "data_available = " & to_string(data_available) & ", DATA_COUNT = " & to_string(DATA_COUNT_TB);
-                wait for CLK_PERIOD/4;
-				finish;			
 			elsif (DATA_COUNT_TB = 0 and EMPTY_TB /= '1')
 			then
 				report "TEST FAILED: EMPTY Flag not working";
@@ -194,31 +179,36 @@ begin
     		
 			Next_Step(input_file, L, do_fifo_read, write_num);
 			
-			if (read_latency_valid_counter(READ_LATENCY_TB) = '1') then
+			if (read_latency_valid_counter(READ_LATENCY_TB) = '1' and (VALID_TB /= '1' or DATA_OUT_TB /= std_logic_vector(to_unsigned(next_read_num, WIDTH_TB)))) then
+				report "TEST FAILED";
+				if (VALID_TB /= '1') then
+					report "VALID_TB should equal '1' for valid read operations";
+				else
+					report "DATA_OUT_TB = " & to_string(TO_INTEGER(unsigned(DATA_OUT_TB))) & " when it should = " & to_string(next_read_num);
+				end if;
+				wait for CLK_PERIOD/4;
+				finish;
+			end if;
+
+			if (read_latency_valid_counter(READ_LATENCY_TB-1) = '1') then
                 if (not endfile(input_file_writes_only)) then
                     Next_Step_Writes_Only(input_file_writes_only, L_writes_only, next_read_num);
                 else
-                    report "Catastrophic file reading error has occurred. TEST SIGNIFICANTLY FAILED";
+                    report "TEST FAILED: reads go through when they shouldn't";
                     wait for CLK_PERIOD/4;
                     finish;
                 end if;
-                if (VALID_TB /= '1' or DATA_OUT_TB /= std_logic_vector(to_unsigned(next_read_num, WIDTH_TB))) then
-				    report "TEST FAILED: Either the FIFO storage, the Read_Latency pipeline, or both err";
-				    report "VALID_TB = " & to_string(VALID_TB) & ", DATA_OUT_TB = " & to_string(TO_INTEGER(unsigned(DATA_OUT_TB))) & ", Next READ Number = " & to_string(next_read_num);
-                    wait for CLK_PERIOD/4;
-				    finish;
-                end if;
 			end if;
 			
-			FIFO_JUST_MADE_FULL := false;
 			read_latency_valid_counter(READ_LATENCY_TB downto 1) <= read_latency_valid_counter(READ_LATENCY_TB-1 downto 0);
             read_latency_valid_counter(0) <= '0';
+			data_in_fifo_prev2 := data_in_fifo_prev;
 			if (do_fifo_read) then
 				--read
 				READ_ENABLE_TB <= '1';
 				WRITE_ENABLE_TB <= '0';
-				if (data_available /= 0) then
-					data_available := data_available - 1;
+				if (data_in_fifo_prev /= 0) then
+					data_in_fifo_prev := data_in_fifo_prev - 1;
 					read_latency_valid_counter(0) <= '1';
 				else
 					read_latency_valid_counter(0) <= '0';
@@ -227,17 +217,16 @@ begin
 				--write
 				READ_ENABLE_TB <= '0';
 				WRITE_ENABLE_TB <= '1';
-				if (data_available /= DEPTH_TB) then
-					FIFO_JUST_MADE_FULL := true when (data_available = DEPTH_TB - 1) else false;
-					data_available := data_available + 1;
+				if (data_in_fifo_prev /= DEPTH_TB) then
+					data_in_fifo_prev := data_in_fifo_prev + 1;
 					DATA_IN_TB <= std_logic_vector(to_unsigned(write_num, WIDTH_TB));
 				end if;
 			end if;
             do_fifo_read_sig <= do_fifo_read;
 	        write_num_sig <= write_num;
 	        next_read_num_sig <= next_read_num;
-	        FIFO_JUST_MADE_FULL_sig <= FIFO_JUST_MADE_FULL;
-	        data_available_sig <= data_available;
+	        data_in_fifo_prev_sig <= data_in_fifo_prev;
+			data_in_fifo_prev2_sig <= data_in_fifo_prev2;
 		end loop;
 
 		report "RNG TEST PASSED";
