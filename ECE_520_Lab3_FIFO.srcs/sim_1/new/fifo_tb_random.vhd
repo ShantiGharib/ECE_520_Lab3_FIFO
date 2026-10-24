@@ -22,7 +22,8 @@ library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use std.textio.all;
 package input_file_parse is
-    procedure Next_Step(file input_file : TEXT; L: inout LINE; IS_FIFO_READ_OP : out boolean; write_number : out integer);
+	type FIFO_OP is (READ_FIFO, WRITE_FIFO, RESET_FIFO);
+    procedure Next_Step(file input_file : TEXT; L: inout LINE; PENDING_FIFO_OP : out FIFO_OP; write_number : out integer);
 	procedure Next_Step_Writes_Only(file input_file : TEXT; L: inout LINE; write_number : out integer);
 end package;
 
@@ -33,16 +34,18 @@ package body input_file_parse is
 		read(L, write_number);
 	end procedure;
 
-    procedure Next_Step(file input_file : TEXT; L: inout LINE; IS_FIFO_READ_OP : out boolean; write_number : out integer) is
+    procedure Next_Step(file input_file : TEXT; L: inout LINE; PENDING_FIFO_OP : out FIFO_OP; write_number : out integer) is
         variable first_char : character;
     begin
 		write_number := 0;
 		readline(input_file, L);
         read(L, first_char);
 		if (first_char = '-') then
-			IS_FIFO_READ_OP := true;
+			PENDING_FIFO_OP := READ_FIFO;
+		elsif (first_char = 'R') then
+			PENDING_FIFO_OP := RESET_FIFO;
 		else
-			IS_FIFO_READ_OP := false;
+			PENDING_FIFO_OP := WRITE_FIFO;
 			read(L, write_number);
 		end if;
     end procedure;
@@ -99,10 +102,10 @@ architecture Behavioral of fifo_random_tb is
     ---------------
     -------------------------
 	signal read_latency_valid_counter : std_logic_vector(READ_LATENCY_TB downto 0) := (others => '0'); --synchronous behavior delays FIFO by one clock cycle 
-	signal do_fifo_read_sig : boolean := false;
-	signal write_num_sig     : integer := 0;
-	signal next_read_num_sig : integer := 0;
-	signal data_in_fifo_prev_sig : integer := 0;
+	signal pending_fifo_op_sig    : FIFO_OP;
+	signal write_num_sig          : integer := 0;
+	signal next_read_num_sig      : integer := 0;
+	signal data_in_fifo_prev_sig  : integer := 0;
 	signal data_in_fifo_prev2_sig : integer := 0;
 begin
 
@@ -140,10 +143,10 @@ begin
 
     test_process : process
     variable L : line;
-	variable L_writes_only : line;
-	variable do_fifo_read  : boolean := false;
-	variable write_num     : integer := 0;
-	variable next_read_num : integer := 0;
+	variable L_writes_only      : line;
+	variable pending_fifo_op    : FIFO_OP;
+	variable write_num          : integer := 0;
+	variable next_read_num      : integer := 0;
 	variable data_in_fifo_prev  : integer :=  0;
 	variable data_in_fifo_prev2 : integer :=  0; --expectation is fifo data_count signal is behind by two clock cycles. one clock cycle to update data_count, another clock cycle for others to read the change
     begin
@@ -177,7 +180,7 @@ begin
 				finish;
 			end if;
     		
-			Next_Step(input_file, L, do_fifo_read, write_num);
+			Next_Step(input_file, L, pending_fifo_op, write_num);
 			
 			if (read_latency_valid_counter(READ_LATENCY_TB) = '1' and (VALID_TB /= '1' or DATA_OUT_TB /= std_logic_vector(to_unsigned(next_read_num, WIDTH_TB)))) then
 				report "TEST FAILED";
@@ -203,29 +206,36 @@ begin
 			read_latency_valid_counter(READ_LATENCY_TB downto 1) <= read_latency_valid_counter(READ_LATENCY_TB-1 downto 0);
             read_latency_valid_counter(0) <= '0';
 			data_in_fifo_prev2 := data_in_fifo_prev;
-			if (do_fifo_read) then
+			if (pending_fifo_op = READ_FIFO) then
 				--read
-				READ_ENABLE_TB <= '1';
+				READ_ENABLE_TB  <= '1';
 				WRITE_ENABLE_TB <= '0';
+				SRST_TB <= '0';
 				if (data_in_fifo_prev /= 0) then
 					data_in_fifo_prev := data_in_fifo_prev - 1;
 					read_latency_valid_counter(0) <= '1';
 				else
 					read_latency_valid_counter(0) <= '0';
 				end if;
-			else
+			elsif (pending_fifo_op = WRITE_FIFO) then
 				--write
-				READ_ENABLE_TB <= '0';
+				READ_ENABLE_TB  <= '0';
 				WRITE_ENABLE_TB <= '1';
+				SRST_TB <= '0';
 				if (data_in_fifo_prev /= DEPTH_TB) then
 					data_in_fifo_prev := data_in_fifo_prev + 1;
 					DATA_IN_TB <= std_logic_vector(to_unsigned(write_num, WIDTH_TB));
 				end if;
+			else
+				--reset
+				SRST_TB <= '1';
+				data_in_fifo_prev := 0;
+				read_latency_valid_counter <= (others => '0');
 			end if;
-            do_fifo_read_sig <= do_fifo_read;
-	        write_num_sig <= write_num;
-	        next_read_num_sig <= next_read_num;
-	        data_in_fifo_prev_sig <= data_in_fifo_prev;
+            pending_fifo_op_sig    <= pending_fifo_op;
+	        write_num_sig          <= write_num;
+	        next_read_num_sig      <= next_read_num;
+	        data_in_fifo_prev_sig  <= data_in_fifo_prev;
 			data_in_fifo_prev2_sig <= data_in_fifo_prev2;
 		end loop;
 

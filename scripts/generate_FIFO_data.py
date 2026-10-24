@@ -3,11 +3,11 @@ import sys
 import time
 import pathlib
 def main():
-	WIDTH_TB_LINE = 76
-	DEPTH_TB_LINE = 77
-	ALMOST_EMPTY_THRESHOLD_TB_LINE = 78
-	ALMOST_FULL_THRESHOLD_TB_LINE = 79
-	READ_LATENCY_TB_LINE = 80
+	WIDTH_TB_LINE = 79
+	DEPTH_TB_LINE = 80
+	ALMOST_EMPTY_THRESHOLD_TB_LINE = 81
+	ALMOST_FULL_THRESHOLD_TB_LINE = 82
+	READ_LATENCY_TB_LINE = 83
 
 	bit_width              = 24  # values may be changed	
 	almost_empty_threshold =  3  # values may be changed 
@@ -28,8 +28,8 @@ def main():
 	i = 0
 	
 	steps = random.randint(20, 1024)
-	output_str = str()
-	output_writes_only_str = str()
+	output_str = list(str())
+	output_writes_only_str = list(str())
 	#output_str = "steps = " + str(steps) + "\n"
 
 	# bit_width = random.randint(1, 64)
@@ -47,34 +47,49 @@ def main():
 	# READ_LATENCY = random.randint(1, 8)
 	# output_str += "READ_LATENCY = " + str(READ_LATENCY) + "\n"
 
-	write_operation_bias = random.randint(20, 95)
+	write_operation_bias = random.randint(200, 950) #20-95%
+	reset_operation_bias = random.randint( 10,  25) #1-2.5%
 	fifo_elements = int(0)
+	writes_only_curr_line = int(0)
+	read_latency_checker = int(0)
 	while (i < steps):
-		operation_random_idx = random.randint(1, 100)
+		read_latency_checker <<= 0x01
+		operation_random_idx = random.randint(1, 1000)
 		if (operation_random_idx <= write_operation_bias):
 			random_num = random.randint(0, (2 ** bit_width) - 1)
-			output_str += "+" + str(random_num) + "\n"
+			output_str.append("+" + str(random_num) + "\n")
 			if fifo_elements != depth:
-				output_writes_only_str += str(random_num) + "\n"
+				output_writes_only_str.append(str(random_num) + "\n")
 				fifo_elements = fifo_elements + 1
+		elif (operation_random_idx <= write_operation_bias + reset_operation_bias):
+			output_str.append("R\n")
+			fifo_elements = 0
+			read_latency_checker = 0
+			if (writes_only_curr_line == 0):
+				output_writes_only_str.clear()
+			else:
+				output_writes_only_str = output_writes_only_str[0 : writes_only_curr_line]
 		else:
-			output_str += "-\n"
+			output_str.append("-\n")
 			if fifo_elements != 0:
+				read_latency_checker |= 0x01
 				fifo_elements = fifo_elements - 1
 		i = i + 1
+		if ((read_latency_checker & (1 << read_latency)) == (1 << read_latency)):
+			writes_only_curr_line = writes_only_curr_line + 1
 
 	if (len(output_str) != 0):
-		output_str = output_str[0:-2]
+		output_str[-1] = output_str[-1][0:-1]
 	
 	if (len(output_writes_only_str) != 0):
-		output_writes_only_str = output_writes_only_str[0:-2]
+		output_writes_only_str[-1] = output_writes_only_str[-1][0:-1]
 
 	file = open(out_path,'w')
-	file.write(output_str)
+	file.writelines(output_str)
 	file.close()
 
 	file = open(out_path_writes_only,'w')
-	file.write(output_writes_only_str)
+	file.writelines(output_writes_only_str)
 	file.close()
 
 	#editing testbench for bit_width and depth
