@@ -70,15 +70,17 @@ architecture Behavioral of fifo is
     signal DELAYED_OUTPUTS : slv_vector(READ_LATENCY-1 downto 0) := (others => (others => '0'));
     signal DELAYED_VALID_OUTPUT : std_logic_vector(READ_LATENCY-1 downto 0) := (others => '0');
 begin
-    assert (2**ceil_log2(DEPTH)) = DEPTH;
-    assert (READ_LATENCY >= READ_LATENCY_MIN) and (READ_LATENCY <= READ_LATENCY_MAX);
-    assert ALMOST_EMPTY_THRESHOLD <= ALMOST_FULL_THRESHOLD and ALMOST_FULL_THRESHOLD <= DEPTH;
+    assert (2**ceil_log2(DEPTH)) = DEPTH severity failure;
+    assert (READ_LATENCY >= READ_LATENCY_MIN) and (READ_LATENCY <= READ_LATENCY_MAX) severity failure;
+    assert ALMOST_EMPTY_THRESHOLD <= ALMOST_FULL_THRESHOLD and ALMOST_FULL_THRESHOLD <= DEPTH severity failure;
 
     FIFO_OPS : process(CLK)
         variable data_count_var : integer range 0 to DEPTH := 0;
     begin
         if (rising_edge(CLK)) then
             if (HAS_LATENCY) then
+				--allow data_out to retain same value unless it absolutely should not to allow easier timing requirements
+				--valid should still be one clock cycle
                 -----READ Latency Pipeline
                 DATA_OUT <= DELAYED_OUTPUTS(READ_LATENCY-2);
                 VALID    <= DELAYED_VALID_OUTPUT(READ_LATENCY-2);
@@ -86,25 +88,22 @@ begin
                     DELAYED_OUTPUTS(it)      <= DELAYED_OUTPUTS(it-1);
                     DELAYED_VALID_OUTPUT(it) <= DELAYED_VALID_OUTPUT(it-1);
                 end loop;
-                DELAYED_OUTPUTS(0)      <= (others => '0');
-                DELAYED_VALID_OUTPUT(0) <= '0';
+				DELAYED_VALID_OUTPUT(0) <= '0';
                 -----
-            else
-                DATA_OUT <= (others => '0');
-                VALID    <= '0';
+			else
+				VALID <= '0';
             end if;
             
             if (SRST = '1') then
                 READ_POINTER   <= 0;
                 WRITE_POINTER  <= 0;
-                data_count_var := 0;                
+                data_count_var := 0;     
+				DATA_OUT <= (others => '0');
+				VALID    <= '0';
                 if (HAS_LATENCY) then
-                    DATA_OUT <= (others => '0');
-                    VALID    <= '0';
                     DELAYED_OUTPUTS      <= (others => (others => '0'));
                     DELAYED_VALID_OUTPUT <= (others => '0');
                 end if;
-
             elsif ((READ_ENABLE = '1') and (EMPTY /= '1')) then
                 if (HAS_LATENCY) then
                     ---adjusted for READ Latency Pipeline---
