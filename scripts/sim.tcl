@@ -1,15 +1,17 @@
+set proj_name ECE_520_Lab3_FIFO
 set current_dir [file normalize [file dirname [info script]]]
 set repo_dir [file dirname $current_dir]
-set proj_dir [file join $repo_dir proj]
+set proj_dir [file join $repo_dir $proj_name]
 
-set input_data_path [file join $repo_dir sim input_data.txt]
-if {![file exists $input_data_path]} {
-    error "sim/input_data.txt not found at $input_data_path. Run scripts/generate_mult_data.py first."
+set input_data_path [file join $proj_dir sim input_data.txt]
+set input_data_writes_only_path [file join $proj_dir sim input_data_writes_only.txt]
+if {![file exists $input_data_path] || ![file exists $input_data_writes_only_path]} {
+    error "Run scripts/generate_mult_data.py first."
 }
 
 set xpr_files [glob -nocomplain [file join $proj_dir *.xpr]]
 if {[llength $xpr_files] == 0} {
-    error "No Vivado project found in $proj_dir. Run create.tcl first."
+    error "No Vivado project found in $proj_dir. Run generate.tcl first."
 }
 open_project [lindex $xpr_files 0]
 
