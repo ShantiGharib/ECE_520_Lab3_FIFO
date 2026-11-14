@@ -7,7 +7,7 @@
     is the Zybo Z7-20. The language used is 
     VHDL 2008.
 # Design Summary
-    the block takes a clk signal, synchronous reset signal,
+    The block takes a clk signal, synchronous reset signal,
     DATA_IN signal, WRITE_ENABLE signal, and
     READ_ENABLE signal. The block prioritizes read attempts over 
     write attempts. The block has an internal memory block
@@ -22,7 +22,7 @@
     The fifo has configurable parameters for the word size, depth size,
     and Almost Full and Almost Empty Thresholds.
     The fifo outputs a valid signal, data_out signal, data_count signal,
-    full, almost_full, empty, and almost_empty threshold signals.
+    and full, almost_full, empty, and almost_empty threshold signals.
     The valid signal communicates whether the current read output
     corresponds to a non invalidated read attempt.
 # Verification and Results
