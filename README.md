@@ -26,15 +26,21 @@
     The valid signal communicates whether the current read output
     corresponds to a non invalidated read attempt.
 # Verification and Results
-    ###TODO: change template to reflect this project
-    I created two testbenches, one for each module. 
-    
-    For the blinking led module, because the module needs to count up to the value of the generic input, I added a test to check whether that aspect works. 
-    I added another test to verify if when rst is 1 or when led_en is 0, that both the counter and led_out are always zero. This test has easy to follow comments in the code, so for more detail, go to code line 93 in ".\Lab1_rgb_led_ShantiGharib.srcs\sim_1\new\blinking_led_tb.vhd"
-
-    For the rgb controller module, I created 7 different tests, where the first three tests are independent and the fourth test is comprised of 4 parts. The tests check whether each of the rgb color inputs and outputs work and whether any combination of at least two of the three rgb colors' enable signals results in the rgb never illuminating: rg, rb, gb, rgb.
-
-    All the tests eventually passed.
+    I created a python script that selects a random number of test iterations
+    from 20 to 1024. For each iteration, it randomly
+    chooses one operation, either write, read, or reset.
+    Additonally, the likelihood of each operation is not uniform.
+    Each run of the script will select a random value from 20% to 95%
+    which becomes the odds of a write operation. It will select another value between
+    1% to 2.5% whoch becomes the odds of a reset.
+    The difference between 100% and the sum of the write and reset odds
+    becomes the odds of a read operation.
+    The sequence of operations are encoded in a text file.
+    The results the fifo should read are encoded in another text file.
+    The testbench follows the operations in the first textfile, and 
+    verifies its read values against the second text file.
+    A bunch of if statements are used to ensure all the signals remain
+    valid across the duration of the testbench.
 
 # Known Issues or Limitations
     --empty
